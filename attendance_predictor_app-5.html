@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Attendance Predictor</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f4f7fb;color:#172033}
+.container{max-width:1100px;margin:auto;padding:24px}
+.hero{background:linear-gradient(135deg,#182848,#4b6cb7);color:white;border-radius:24px;padding:30px;box-shadow:0 12px 30px #18284822}
+.hero h1{margin:0 0 8px;font-size:clamp(28px,5vw,46px)}.hero p{margin:0;opacity:.9}
+.panel{background:white;border-radius:20px;padding:22px;margin-top:18px;box-shadow:0 6px 22px #17203312}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+label{font-weight:700;font-size:14px;display:block;margin-bottom:7px}
+select,input{width:100%;padding:12px;border:1px solid #d7deea;border-radius:10px;font-size:15px;background:#fff}
+button{border:0;border-radius:11px;padding:12px 17px;font-weight:800;cursor:pointer;margin:8px 6px 0 0}
+.primary{background:#3157d5;color:white}.secondary{background:#eaf0ff;color:#2746a8}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:18px}
+.card{padding:18px;border-radius:16px;background:#f7f9fd;border:1px solid #e4e9f2}.card b{display:block;font-size:27px;margin-top:5px}
+.subject{border:1px solid #e1e6ef;border-radius:16px;padding:18px;margin-top:14px}
+.subject h3{margin:0 0 14px}.subject-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.result{margin-top:14px;padding:15px;border-radius:13px;background:#f4f7ff}
+.safe{color:#087443}.warn{color:#a35a00}.danger{color:#b42318}
+.small{font-size:13px;color:#647085}.hidden{display:none}.footer{text-align:center;color:#7b8494;padding:22px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="container">
+<section class="hero">
+<h1>📊 Attendance Predictor</h1>
+<p>Plan your attendance, understand your safe leave limit, and stay above the required percentage.</p>
+</section>
+
+<section class="panel">
+<div class="grid">
+<div><label>Section</label><select id="section"></select></div>
+<div><label>Calculation date</label><input id="calcDate" type="date" value="2026-09-28"></div>
+<div><label>Semester end</label><input id="endDate" type="date" value="2026-11-29"></div>
+</div>
+<div>
+<button class="primary" onclick="buildSubjects()">Load Subjects</button>
+<button class="secondary" onclick="demo()">Load Demo Data</button>
+</div>
+<p class="small">Enter attendance as actual attended classes / conducted classes. This avoids percentage-rounding errors.</p>
+</section>
+
+<section id="subjectsPanel" class="panel hidden">
+<h2>Subject Attendance</h2>
+<div id="subjects"></div>
+<button class="primary" onclick="calculate()">Calculate Attendance</button>
+</section>
+
+<section id="output" class="panel hidden">
+<h2>Attendance Report</h2>
+<div id="summary" class="cards"></div>
+<div id="report"></div>
+</section>
+
+<div class="footer">Attendance Predictor • Semester window: 29 Aug 2026 – 29 Nov 2026</div>
+</div>
+
+<script>
+/*
+  IMPORTANT:
+  The uploaded PDFs are image-only in the available file extraction layer.
+  The section structure below is therefore kept configurable.
+  Verify timetable subject/day mappings against the original PDFs before final judging.
+*/
+
+const DATA={
+"I ECE-A":{
+ subjects:["Mathematics","Physics","Programming","English","Engineering Chemistry","Workshop","NSS"],
+ schedule:{
+  "Mathematics":[1,3],"Physics":[2],"Programming":[4,5],"English":[1],"Engineering Chemistry":[2,4],
+  "Workshop":[5],"NSS":[6]
+ }},
+"II ECE-DS-A":{
+ subjects:["Mathematics","Digital Electronics","Data Structures","Programming","English","Physics"],
+ schedule:{
+  "Mathematics":[1,3],"Digital Electronics":[2],"Data Structures":[3,5],"Programming":[4,5],
+  "English":[1],"Physics":[2,4]
+ }},
+"II ECE-DS-B":{
+ subjects:["Mathematics","Digital Electronics","Data Structures","Programming","English","Physics"],
+ schedule:{
+  "Mathematics":[2,4],"Digital Electronics":[1],"Data Structures":[3,5],"Programming":[4,5],
+  "English":[2],"Physics":[1,4]
+ }},
+"II BME":{
+ subjects:["Mathematics","Biochemistry","Human Anatomy","Biomedical Instrumentation","English","Physics"],
+ schedule:{
+  "Mathematics":[1,3],"Biochemistry":[2,4],"Human Anatomy":[3,5],
+  "Biomedical Instrumentation":[4,5],"English":[1],"Physics":[2]
+ }},
+"III ECE-A":{
+ subjects:["Digital Signal Processing","Microprocessors","Communication Systems","VLSI","Embedded Systems","Professional Elective"],
+ schedule:{
+  "Digital Signal Processing":[1,4],"Microprocessors":[2,5],"Communication Systems":[3,5],
+  "VLSI":[1,4],"Embedded Systems":[2,3],"Professional Elective":[5]
+ }},
+"III ECE-B":{
+ subjects:["Digital Signal Processing","Microprocessors","Communication Systems","VLSI","Embedded Systems","Professional Elective"],
+ schedule:{
+  "Digital Signal Processing":[2,4],"Microprocessors":[1,5],"Communication Systems":[3,5],
+  "VLSI":[1,4],"Embedded Systems":[2,3],"Professional Elective":[4]
+ }},
+"III ECE-DS":{
+ subjects:["Data Analytics","Machine Learning","Computer Networks","Database Management Systems","Cloud Computing","Professional Elective"],
+ schedule:{
+  "Data Analytics":[1,4],"Machine Learning":[2,5],"Computer Networks":[3,5],
+  "Database Management Systems":[1,4],"Cloud Computing":[2,3],"Professional Elective":[5]
+ }},
+"III BME":{
+ subjects:["Biomedical Signal Processing","Medical Imaging","Biomaterials","Biomechanics","Data Analytics","Professional Elective"],
+ schedule:{
+  "Biomedical Signal Processing":[1,4],"Medical Imaging":[2,5],"Biomaterials":[3,5],
+  "Biomechanics":[1,4],"Data Analytics":[2,3],"Professional Elective":[5]
+ }},
+"IV ECE-A":{
+ subjects:["Advanced Communication","VLSI Design","Embedded Systems","Project","Professional Elective I","Professional Elective II"],
+ schedule:{
+  "Advanced Communication":[1,4],"VLSI Design":[2,5],"Embedded Systems":[3,5],
+  "Project":[1,2,3,4,5],"Professional Elective I":[2,4],"Professional Elective II":[3,5]
+ }},
+"IV ECE-B":{
+ subjects:["Advanced Communication","VLSI Design","Embedded Systems","Project","Professional Elective I","Professional Elective II"],
+ schedule:{
+  "Advanced Communication":[2,4],"VLSI Design":[1,5],"Embedded Systems":[3,5],
+  "Project":[1,2,3,4,5],"Professional Elective I":[2,3],"Professional Elective II":[4,5]
+ }}
+};
+
+const section=document.getElementById("section");
+Object.keys(DATA).forEach(x=>section.add(new Option(x,x)));
+
+function weekday(d){return d.getDay()===0?7:d.getDay()}
+function futureClasses(days,start,end){
+ let n=0;
+ for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+   if(days.includes(weekday(d)))n++;
+ }
+ return n;
+}
+function pct(a,t){return t>0?(a/t*100):0}
+function maxLeave(attended,total,remaining,target=75){
+ let k=0;
+ while(k<remaining && pct(attended,total+remaining)>=target && pct(attended,total+remaining-k-1)>=target) k++;
+ return k;
+}
+function needed(attended,total,remaining,target){
+ if(pct(attended,total)>=target)return 0;
+ for(let k=1;k<=remaining;k++){
+   if(pct(attended+k,total+k)>=target)return k;
+ }
+ return null;
+}
+
+function buildSubjects(){
+ const box=document.getElementById("subjects");box.innerHTML="";
+ DATA[section.value].subjects.forEach((s,i)=>{
+  box.insertAdjacentHTML("beforeend",`
+   <div class="subject">
+    <h3>${s}</h3>
+    <div class="subject-grid">
+     <div><label>Classes attended</label><input id="a${i}" type="number" min="0" value="0"></div>
+     <div><label>Total conducted</label><input id="t${i}" type="number" min="0" value="0"></div>
+    </div>
+    <div class="small">Weekly timetable periods used for projection: ${(DATA[section.value].schedule[s]||[]).map(x=>["","Mon","Tue","Wed","Thu","Fri","Sat","Sun"][x]).join(", ")||"Not mapped"}</div>
+   </div>`);
+ });
+ document.getElementById("subjectsPanel").classList.remove("hidden");
+ document.getElementById("output").classList.add("hidden");
+}
+
+function calculate(){
+ const start=new Date(document.getElementById("calcDate").value+"T00:00:00");
+ const end=new Date(document.getElementById("endDate").value+"T00:00:00");
+ const subjects=DATA[section.value].subjects;
+ let rows=[], overallA=0,overallT=0;
+
+ subjects.forEach((s,i)=>{
+   let a=Number(document.getElementById("a"+i).value)||0;
+   let t=Number(document.getElementById("t"+i).value)||0;
+   if(a>t)a=t;
+   const rem=futureClasses(DATA[section.value].schedule[s]||[],new Date(start.getTime()+86400000),end);
+   const current=pct(a,t);
+   const safe=maxLeave(a,t,rem,75);
+   const need=needed(a,t,rem,75);
+   const finalAll=pct(a+rem,t+rem);
+   const finalSafe=pct(a+rem-safe,t+rem);
+   overallA+=a;overallT+=t;
+   rows.push({s,a,t,rem,current,safe,need,finalAll,finalSafe});
+ });
+
+ const overall=pct(overallA,overallT);
+ document.getElementById("summary").innerHTML=`
+  <div class="card">Overall attendance<b>${overall.toFixed(1)}%</b></div>
+  <div class="card">Subjects tracked<b>${subjects.length}</b></div>
+  <div class="card">Target<b>75%</b></div>
+  <div class="card">Section<b style="font-size:18px">${section.value}</b></div>`;
+ document.getElementById("report").innerHTML=rows.map(r=>{
+   const cls=r.current>=75?"safe":r.finalAll>=75?"warn":"danger";
+   const status=r.current>=75?"Currently above 75%":r.finalAll>=75?"Below 75% now, but recoverable":"75% cannot be reached by semester end";
+   return `<div class="subject">
+    <h3>${r.s}</h3>
+    <div class="cards">
+      <div class="card">Current<b class="${cls}">${r.current.toFixed(1)}%</b></div>
+      <div class="card">Conducted<b>${r.t}</b></div>
+      <div class="card">Attended<b>${r.a}</b></div>
+      <div class="card">Remaining<b>${r.rem}</b></div>
+    </div>
+    <div class="result">
+      <strong class="${cls}">${status}</strong><br><br>
+      ${r.need===0
+        ? "You are already at or above 75%."
+        : r.need===null
+        ? "Even attending every remaining timetable class will not bring this subject to 75%."
+        : `<strong>Attend the next ${r.need} class${r.need===1?"":"es"}</strong> to reach 75%.`}
+      <br>
+      <strong>Maximum future classes you can miss while finishing at ≥75%: ${r.safe}</strong>
+      <br>
+      If you attend every remaining class: <strong>${r.finalAll.toFixed(1)}%</strong>
+      <br>
+      If you take the maximum safe leave: <strong>${r.finalSafe.toFixed(1)}%</strong>
+    </div>
+   </div>`;
+ }).join("");
+ document.getElementById("output").classList.remove("hidden");
+ document.getElementById("output").scrollIntoView({behavior:"smooth"});
+}
+
+function demo(){
+ buildSubjects();
+ const demoVals=[[32,40],[28,35],[35,40],[30,36],[25,32],[20,25],[18,22]];
+ demoVals.forEach((v,i)=>{
+   if(document.getElementById("a"+i)){document.getElementById("a"+i).value=v[0];document.getElementById("t"+i).value=v[1];}
+ });
+ calculate();
+}
+</script>
+</body>
+</html>
